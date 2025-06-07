@@ -1,69 +1,48 @@
-# Import Python packages
+# Import python packages
 import streamlit as st
-import requests
 from snowflake.snowpark.functions import col
+import requests
 
-# Título de la app
-st.title("Customize Your Smoothie :cup_with_straw:")
-st.write("Choose the fruits you want in your custom Smoothie!")
+# Write directly to the app
+st.title(f" :cup_with_straw: Costomize yout smoothie :cup_with_straw: ")
+st.write(
+  """Choose the fruit you want in your custom smoothie!
+  """
+)
 
-# Input del usuario
-name_on_order = st.text_input("Name on Smoothie")
-st.write("The name on your smoothie will be:", name_on_order)
+import streamlit as st
 
-try:
-    # Conexión a Snowflake
-    cnx = st.connection("snowflake")
-    session = cnx.session()
+name_on_order = st.text_input("Name on smoothie:", max_chars=100)
+st.write("The name on yor smoothie will be: ", name_on_order)
 
-    # Recuperar opciones de fruta
-    fruit_snowpark_df = session.table("smoothies.public.fruit_options").select(col("FRUIT_NAME"), col("SEARCH_ON"))
-    pd_df = fruit_snowpark_df.to_pandas()
+cnx= st.connection("snowflake")
+session = cnx.session()
+my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'))
+#st.dataframe(data=my_dataframe, use_container_width=True)
 
-    # Lista de frutas para el multiselect
-    fruit_names = pd_df["FRUIT_NAME"].tolist()
-    ingredients_list = st.multiselect("Choose up to 5 ingredients:", fruit_names, max_selections=5)
-
-    if ingredients_list:
-        ingredients_string = ""
-
-        for fruit_chosen in ingredients_list:
-            try:
-                ingredients_string += fruit_chosen + " "
-
-                # Obtener el campo SEARCH_ON desde el DataFrame
-                search_on = pd_df.loc[pd_df["FRUIT_NAME"] == fruit_chosen, "SEARCH_ON"].iloc[0]
-
-                # Mostrar nutrición de cada fruta
-                st.subheader(f"{fruit_chosen} Nutrition Information")
-                fruityvice_response = requests.get(f"https://my.smoothiefroot.com/api/fruit/{search_on}")
-                fruityvice_response.raise_for_status()
-
-                st.dataframe(data=fruityvice_response.json(), use_container_width=True)
-
-            except requests.exceptions.RequestException as e:
-                st.error(f"❌ Failed to fetch details for {fruit_chosen}: {str(e)}")
-            except IndexError:
-                st.warning(f"⚠️ No SEARCH_ON value found for {fruit_chosen}")
-            except Exception as e:
-                st.error(f"🔥 Error general con {fruit_chosen}: {str(e)}")
-
-        # Limpieza de string final
-        ingredients_string = ingredients_string.strip()
-
-        # Insertar orden a DB
-        if st.button("Submit Order"):
-            try:
-                my_insert_stmt = f"""
-                    INSERT INTO smoothies.public.orders(ingredients, name_on_order)
-                    VALUES ('{ingredients_string}', '{name_on_order}')
-                """
-                session.sql(my_insert_stmt).collect()
-                st.success(f"✅ Your Smoothie is ordered, {name_on_order}!")
-            except Exception as e:
-                st.error(f"❌ Failed to submit order: {str(e)}")
-
-except Exception as ex:
-    st.error(f"💥 An error occurred: {str(ex)}")
+ingredients_list = st.multiselect (
+"Choose up to 5 ingredients"
+, my_dataframe
+, max_selections = 5
+)
+if ingredients_list:
+  ingredients_string =''
+  time_to_insert = st.button ("Order smoothie")
+  
+  for fruit_chosen in ingredients_list:
+    ingredients_string += fruit_chosen + ' '
+    st.subheader(fruit_chosen + ' Nutrition Information')
+    smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/" + fruit_chosen)
+    sf_df=st.dataframe(data=smoothiefroot_response.json(), use_container_width=True)
+    #st.write(ingredients_string)
+    
+    my_insert_stmt = """ insert into smoothies.public.orders(ingredients, NAME_ON_ORDER)
+            values ('""" + ingredients_string + """','""" + name_on_order + """')"""
+    
+    st.write(my_insert_stmt)
+    #st.stop()
+    if time_to_insert:
+      session.sql(my_insert_stmt).collect()
+      st.success('Your Smoothie is ordered! ' + name_on_order, icon="✅")
 
 
