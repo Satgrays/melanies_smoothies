@@ -29,25 +29,30 @@ try:
 
     # Process ingredients selection
 
-    if ingredients_list:
-        ingredients_string = ''
-        
-        for fruit_chosen in ingredients_list:
-            ingredients_string += fruit_chosen + ' '
-            search_on=pd_df.loc[pd_df ['FRUIT_NAME'] == fruit_chosen, 'SEARCH_ON']. iloc [0]
-            # st.write( 'The search value for ', fruit_chosen,' is ', search_on, '.')
-            st. subheader (fruit_chosen + ' Nutrition Information')
-            fruityvice_response = requests.requests.get ("https://my.smoothiefroot.com/api/fruit/" + search_on)
-            fv_df = st.dataframe(data=fruityvice_response.json(), use_container_width=True)
-                else:
-                    st.warning(f"Failed to fetch details for {fruit_chosen}")
-            
-            except requests.exceptions.RequestException as e:
-                st.error(f"Failed to fetch details for {fruit_chosen}: {str(e)}")
+if ingredients_list:
+    ingredients_string = ''
 
-        # SQL statement to insert order into database (assuming proper handling of SQL injection risk)
-        my_insert_stmt = """INSERT INTO smoothies.public.orders(ingredients, name_on_order)
-                            VALUES ('{}', '{}')""".format(ingredients_string, name_on_order)
+    for fruit_chosen in ingredients_list:
+        try:
+            ingredients_string += fruit_chosen + ' '
+
+            # Asumiendo que pd_df ya fue definido anteriormente como un DataFrame con FRUIT_NAME y SEARCH_ON
+            search_on = pd_df.loc[pd_df['FRUIT_NAME'] == fruit_chosen, 'SEARCH_ON'].iloc[0]
+
+            # Mostrar encabezado
+            st.subheader(f"{fruit_chosen} Nutrition Information")
+
+            # Hacer la petición a la API
+            fruityvice_response = requests.get("https://my.smoothiefroot.com/api/fruit/" + search_on)
+            fruityvice_response.raise_for_status()  # Agrega esto para lanzar error si es 404, 500, etc.
+
+            # Mostrar JSON en la app
+            st.dataframe(data=fruityvice_response.json(), use_container_width=True)
+
+        except requests.exceptions.RequestException as e:
+            st.error(f"Failed to fetch details for {fruit_chosen}: {str(e)}")
+        except Exception as e:
+            st.error(f"Error general con {fruit_chosen}: {str(e)}")
 
         # Button to submit order
         time_to_insert = st.button('Submit Order')
