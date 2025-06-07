@@ -21,45 +21,43 @@ try:
     session = cnx.session()
 
     # Retrieve fruit options from Snowflake
-    # Retrieve fruit options from Snowflake
-    fruit_df = session.table("smoothies.public.fruit_options").select(col("FRUIT_NAME"))
-    fruit_options = [row["FRUIT_NAME"] for row in fruit_df.collect()]  # Convertir a lista
+    my_dataframe = session.table("smoothies.public.fruit_options").select(col("FRUIT_NAME"))
 
-    # Multi-select para elegir ingredientes
-    ingredients_list = st.multiselect('Choose up to 5 ingredients:', fruit_options, max_selections=5)
+    # Multi-select for choosing ingredients
+    ingredients_list = st.multiselect('Choose up to 5 ingredients:', my_dataframe, max_selections=5)
 
-    # Si se eligieron ingredientes
+    # Process ingredients selection
     if ingredients_list:
-        ingredients_string = ' '.join(ingredients_list)
-
-        # Mostrar info nutricional desde Fruityvice
-        st.subheader("🍓 Fruit Nutrition Info")
+        ingredients_string = ' '.join(ingredients_list)  # Join selected ingredients into a single string
         for fruit_chosen in ingredients_list:
-            fruit_api_name = fruit_chosen.lower().replace(" ", "")  # Normalizar nombre
             try:
-                response = requests.get(f"https://fruityvice.com/api/fruit/{fruit_api_name}")
-                response.raise_for_status()
-                data = response.json()
-                st.json(data)  # También podrías formatear mejor si quieres
-            except requests.exceptions.HTTPError:
-                st.warning(f"❌ Fruityvice no tiene info para '{fruit_chosen}'")
+                # Make API request to get details about each fruit
+                fruityvice_response = requests.get("https://fruityvice.com/api/fruit/" + fruit_chosen)
+                fruityvice_response.raise_for_status()  # Raise an error for bad responses (4xx or 5xx)
+                
+                if fruityvice_response.status_code == 200:
+                    fv_df = st.dataframe(data=fruityvice_response.json(), use_container_width=True)
+                else:
+                    st.warning(f"Failed to fetch details for {fruit_chosen}")
+            
             except requests.exceptions.RequestException as e:
-                st.error(f"Error al buscar {fruit_chosen}: {str(e)}")
+                st.error(f"Failed to fetch details for {fruit_chosen}: {str(e)}")
 
-        # Botón para insertar orden
-        if st.button('Submit Order'):
+        # SQL statement to insert order into database (assuming proper handling of SQL injection risk)
+        my_insert_stmt = """INSERT INTO smoothies.public.orders(ingredients, name_on_order)
+                            VALUES ('{}', '{}')""".format(ingredients_string, name_on_order)
+
+        # Button to submit order
+        time_to_insert = st.button('Submit Order')
+        if time_to_insert:
             try:
-                # Crear DataFrame con los datos del pedido y guardar en tabla
-                new_order_df = session.create_dataframe(
-                    [[ingredients_string, name_on_order]],
-                    schema=["INGREDIENTS", "NAME_ON_ORDER"]
-                )
-                new_order_df.write.mode("append").save_as_table("smoothies.public.orders")
-                st.success(f'✅ Your Smoothie is ordered, {name_on_order}!')
+                # Execute SQL insert statement
+                session.sql(my_insert_stmt).collect()
+                st.success('Your Smoothie is ordered, ' + name_on_order + '!', icon="✅")
             except Exception as e:
                 st.error(f"Failed to submit order: {str(e)}")
 
-
 except Exception as ex:
     st.error(f"An error occurred: {str(ex)}")
+
 
